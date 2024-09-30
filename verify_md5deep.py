@@ -6,12 +6,90 @@ from pathlib import Path
 import datetime
 import logging
 
+
 def fix_second(path):
     if not path[0:2] == './':
         path = './' + path
     files = path.split('/')
     files.pop(1)
     return '/'.join(files)[1:]
+
+
+def are_paths_similar(path1, path2, cutoff_percentage=0.4):
+    """
+    Compares two file paths and returns True if they are considered similar 
+    based on a cutoff percentage of how much of either path would need to be 
+    chopped off for them to match. Returns False otherwise.
+    
+    Parameters:
+    - path1 (str): The first file path.
+    - path2 (str): The second file path.
+    - cutoff_percentage (float): The percentage threshold (default is 0.4 or 40%).
+    
+    Returns:
+    - bool: True if the paths are similar based on the given criteria, False otherwise.
+    """
+    
+    # Find the first point where the strings start matching
+    min_len = min(len(path1), len(path2))
+    
+    match_index = -1
+    for i in range(min_len):
+        if path1[-(i + 1):] == path2[-(i + 1):]:
+            match_index = i
+        else:
+            break
+    
+    # If no match found at all, return False
+    if match_index == -1:
+        return False
+    
+    # Calculate the number of characters to be cut off for each path to match
+    cut1 = len(path1) - match_index - 1
+    cut2 = len(path2) - match_index - 1
+    
+    # Calculate the percentage of the path that would be cut off
+    perc1 = cut1 / len(path1)
+    perc2 = cut2 / len(path2)
+    
+    # Return True if both percentages are within the cutoff threshold
+    return perc1 <= cutoff_percentage and perc2 <= cutoff_percentage
+
+
+def subtract_sets_with_similar_paths(set1, set2, cutoff_percentage=0.4):
+    """
+    Compares two sets of (hash, path) pairs and returns the differences between them
+    using path similarity instead of direct path comparison.
+
+    Parameters:
+    - set1: A set of (hash, path) tuples representing files from the first md5deep file.
+    - set2: A set of (hash, path) tuples representing files from the second md5deep file.
+    - cutoff_percentage: The percentage of path that can be chopped off to consider them similar.
+
+    Returns:
+    - unique_to_set1: Items unique to set1 based on hash and path similarity.
+    - unique_to_set2: Items unique to set2 based on hash and path similarity.
+    """
+
+    def find_similar_or_exact(item, comparison_set):
+        """
+        Helper function to find a file in the comparison_set that either has the same hash and similar path,
+        or exactly matches both hash and path.
+        """
+        for other_item in comparison_set:
+            hash1, path1 = item
+            hash2, path2 = other_item
+            if hash1 == hash2 and are_paths_similar(path1, path2, cutoff_percentage):
+                return True
+        return False
+
+    # Find items in set1 that are not in set2
+    unique_to_set1 = {item for item in set1 if not find_similar_or_exact(item, set2)}
+
+    # Find items in set2 that are not in set1
+    unique_to_set2 = {item for item in set2 if not find_similar_or_exact(item, set1)}
+
+    return unique_to_set1, unique_to_set2
 
 
 def process_file(file_name, hash_only, path_only):
@@ -88,6 +166,18 @@ def main():
     if len(set1) == len(set2) and set1 == set2:
         logging.info('File 1 and file 2 are the same')
     else:
+        unique_to_set1, unique_to_set2 = subtract_sets_with_similar_paths(set1, set2)
+        if args.a:
+            for item in unique_to_set1:
+                logging.info(f'FILE THAT IS IN FILE 1 AND NOT IN FILE 2: {item}')
+
+            for item in unique_to_set2:
+                logging.info(f'FILE THAT IS IN FILE 2 AND NOT IN FILE 1: {item}')
+        logging.info(f'File 1 contains {len(set1)} files and has {len(unique_to_set1)} files that file 2 does not (1 - 2)')
+        logging.info(f'File 2 contains {len(set2)} files and has {len(unique_to_set2)} files that file 1 does not (2 - 1)')
+
+        """
+   else:
         if args.a:
             for item in set1 - set2:
                 logging.info(f'FILE THAT IS IN FILE 1 AND NOT IN FILE 2: {item}')
@@ -95,6 +185,7 @@ def main():
                 logging.info(f'FILE THAT IS IN FILE 2 AND NOT IN FILE 1: {item}')
         logging.info(f'File 1 contains {len(set1)} files and has {len(set1 - set2)} files that file 2 does not (1 - 2)')
         logging.info(f'File 2 contains {len(set2)} files and has {len(set2 - set1)} files that file 1 does not (2 - 1)')
+    """
     
     if args.c:
         if args.c[0] == '2':
