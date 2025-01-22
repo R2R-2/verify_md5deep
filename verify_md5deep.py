@@ -107,6 +107,9 @@ def process_file(file_name, hash_only, path_only):
             # and these are different because they don't only have 2 columns.
             elif len(split_2) == 2:
                 pair = (split_2[0].strip(), split_2[1].strip())
+            # edu.washington have started creating md5deep files. They're format contains 3 columns (file size, hash, absolute path). These look similar to the 4-column md5deep files except they're missing the date column. The delimiter for both is a comma.
+            elif len(split_1) == 3:
+                pair = (split_1[1].strip(), split_1[2].strip())
             else:
                 # If we've not found either 2 or 4 commas then I don't recognize this manifest file so just skip this line.
                 continue
