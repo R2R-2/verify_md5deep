@@ -5,6 +5,8 @@ import shutil
 from pathlib import Path
 import datetime
 import logging
+import re
+import sys
 
 
 def fix_second(path):
@@ -56,7 +58,7 @@ def are_paths_similar(path1, path2, cutoff_percentage=0.4):
     return perc1 <= cutoff_percentage and perc2 <= cutoff_percentage
 
 
-def subtract_sets_with_similar_paths(set1, set2, cutoff_percentage=0.4):
+def subtract_sets_with_similar_paths(set1, set2, ignore_hashes, ignore_paths, cutoff_percentage=0.4):
     """
     Compares two sets of (hash, path) pairs and returns the differences between them
     using path similarity instead of direct path comparison.
@@ -79,8 +81,15 @@ def subtract_sets_with_similar_paths(set1, set2, cutoff_percentage=0.4):
         for other_item in comparison_set:
             hash1, path1 = item
             hash2, path2 = other_item
-            if hash1 == hash2 and are_paths_similar(path1, path2, cutoff_percentage):
-                return True
+            if ignore_hashes:
+                if are_paths_similar(path1, path2, cutoff_percentage):
+                    return True
+            elif ignore_paths:
+                if hash1 == hash2:
+                    return True
+            else:
+                if hash1 == hash2 and are_paths_similar(path1, path2, cutoff_percentage):
+                    return True
         return False
 
     # Find items in set1 that are not in set2
@@ -92,7 +101,7 @@ def subtract_sets_with_similar_paths(set1, set2, cutoff_percentage=0.4):
     return unique_to_set1, unique_to_set2
 
 
-def process_file(file_name, hash_only, path_only):
+def process_file(file_name, ignore_list=None):
     file_set = set()
     with open(file_name) as f:
         for line in f:
@@ -114,31 +123,14 @@ def process_file(file_name, hash_only, path_only):
                 # If we've not found either 2 or 4 commas then I don't recognize this manifest file so just skip this line.
                 continue
 
-            # If the user has elected to not check paths then set the path part of the pair to the same thing for all pairs.
-            if hash_only:
-                pair = (pair[0], "ignore me")
+            if ignore_list:
+                # Check if any regex pattern in the list matches the path (pair[1])
+                if any(re.search(pattern, pair[1]) for pattern in ignore_list):
+                    continue
 
-            # In a similar fashion if the user has specified to not check hashes then replace all hashes with a constant so that they'll all match.
-            if path_only:
-                pair = ("ignore me", pair[1])
             file_set.add(pair)
 
     return file_set
-
-
-def copy_difference(path, set_diff):
-    if not set_diff:
-        logging.warning('Set has no difference - copy not created')
-        return
-
-    dir_path = path.rsplit('.', 2)[0]
-    dir_path_update = dir_path + '_update'
-    
-    for _,item in set_diff:
-        directory = os.path.dirname(dir_path_update + item)
-        Path(directory).mkdir(parents=True, exist_ok=True)
-        shutil.copy(dir_path + item, dir_path_update + item)
-    logging.info(f'Copy has been created at path {dir_path_update}')
 
 
 def main():
@@ -147,14 +139,14 @@ def main():
                         help='md5deep file listing file 1')
     parser.add_argument('file2',metavar='file2',
                         help='md5deep file listing file 2')
-    parser.add_argument('-a',action='store_true',
-                        help='show all files')
-    parser.add_argument('-c',nargs=1,metavar='num',
-                        help='copy diff of files in a given direction')
-    parser.add_argument('-f',action='store_true',
-                        help='only compare hashes')
-    parser.add_argument('-q',action='store_true',
-                        help='only compare filepaths')
+    parser.add_argument('-c', metavar='num', type=int, choices=[1, 2],
+                        help='copy diff of files in a given direction (1 or 2)')
+    parser.add_argument('--ignore-hashes',action='store_true',
+                        help='don\'t compare hashes')
+    parser.add_argument('--ignore-paths',action='store_true',
+                        help='don\'t compare filepaths')
+    parser.add_argument('-i', '--ignore', nargs='+', metavar='pattern',
+                        help='list of substrings/patterns to ignore in file paths')
     args = parser.parse_args()
 
     date = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
@@ -162,42 +154,40 @@ def main():
     logging.basicConfig(format='%(asctime)s - %(levelname)-8s - %(message)s',
                         level=logging.DEBUG,
                         handlers=[console_handler])
-    
-    set1 = process_file(args.file1, args.f, args.q)
-    set2 = process_file(args.file2, args.f, args.q)
+
+    if args.ignore_paths and args.ignore_hashes:
+        logging.error('Both the --ignore-paths and --ignore-hashes paths can\'t simultaneously be set or nothing will be compared') 
+        sys.exit(1)
+
+   
+    set1 = process_file(args.file1, args.ignore)
+    set2 = process_file(args.file2, args.ignore)
 
     if len(set1) == len(set2) and set1 == set2:
         logging.info('File 1 and file 2 are the same')
     else:
-        unique_to_set1, unique_to_set2 = subtract_sets_with_similar_paths(set1, set2)
-        if args.a:
-            for item in unique_to_set1:
-                logging.info(f'FILE THAT IS IN FILE 1 AND NOT IN FILE 2: {item}')
+        unique_to_set1, unique_to_set2 = subtract_sets_with_similar_paths(set1, set2, args.ignore_hashes, args.ignore_paths)
+        # If the user hasn't specified that they want only file 2 results shown then display file 1 results.
+        if args.c != 2:
+            for count, item in enumerate(unique_to_set2, 1):
+                logging.info(f'{item}')
 
-            for item in unique_to_set2:
-                logging.info(f'FILE THAT IS IN FILE 2 AND NOT IN FILE 1: {item}')
-        logging.info(f'File 1 contains {len(set1)} files and has {len(unique_to_set1)} files that file 2 does not (1 - 2)')
-        logging.info(f'File 2 contains {len(set2)} files and has {len(unique_to_set2)} files that file 1 does not (2 - 1)')
+        # If the user hasn't specified that they want only file 1 results shown then display file 2 results.
+        if args.c != 1:
+            for count, item in enumerate(unique_to_set1, 1):
+                logging.info(f'{item}')
 
-        """
-   else:
-        if args.a:
-            for item in set1 - set2:
-                logging.info(f'FILE THAT IS IN FILE 1 AND NOT IN FILE 2: {item}')
-            for item in set2 - set1:
-                logging.info(f'FILE THAT IS IN FILE 2 AND NOT IN FILE 1: {item}')
-        logging.info(f'File 1 contains {len(set1)} files and has {len(set1 - set2)} files that file 2 does not (1 - 2)')
-        logging.info(f'File 2 contains {len(set2)} files and has {len(set2 - set1)} files that file 1 does not (2 - 1)')
-    """
-    
-    if args.c:
-        if args.c[0] == '2':
-            copy_difference(args.file2, set2 - set1)
-        elif args.c[0] == '1':
-            copy_difference(args.file1, set1 - set2)
-        else:
-            logging.error('Invalid arguments for copying (must be 1 or 2)')
+        if args.c != 2:
+            logging.info(f'File 1 ({args.file1}) contains {len(set1)} files but is missing {len(unique_to_set2)} of the {len(set2)} files that file 2 ({args.file2}) has.') 
 
+        if args.c != 1:
+            logging.info(f'File 2 ({args.file2}) contains {len(set2)} files but is missing {len(unique_to_set1)} of the {len(set1)} files that file 1 ({args.file1}) has.')
+        
+        if args.ignore_hashes:
+            logging.info(f'Note: hash values were not compared.')
+
+        if args.ignore_paths:
+            logging.info(f'Note: filepaths were not compared.')
 
 if __name__ == "__main__":
     main()
