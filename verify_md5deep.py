@@ -114,6 +114,8 @@ def process_file(file_name, ignore_list=None):
                 pair = (split_1[1].strip(), split_1[3].strip())
             # Distros in the OpenVDM/OpenRVDAS format will have an md5deep file called "md5_summary.txt"
             # and these are different because they don't only have 2 columns.
+            elif len(split_2) == 4: # this is a new format! WHOI is sending space delimited files with 4 columns
+                pair = (split_2[1].strip(), split_2[3].strip())
             elif len(split_2) == 2:
                 pair = (split_2[0].strip(), split_2[1].strip())
             # edu.washington have started creating md5deep files. They're format contains 3 columns (file size, hash, absolute path). These look similar to the 4-column md5deep files except they're missing the date column. The delimiter for both is a comma.
@@ -156,38 +158,44 @@ def main():
                         handlers=[console_handler])
 
     if args.ignore_paths and args.ignore_hashes:
-        logging.error('Both the --ignore-paths and --ignore-hashes paths can\'t simultaneously be set or nothing will be compared') 
+        print('Both the --ignore-paths and --ignore-hashes paths can\'t simultaneously be set or nothing will be compared') 
         sys.exit(1)
 
    
     set1 = process_file(args.file1, args.ignore)
     set2 = process_file(args.file2, args.ignore)
 
+    print("\n----------------------BEGIN VERIFY_MD5DEEP REPORT----------------------\n")
+
     if len(set1) == len(set2) and set1 == set2:
-        logging.info('File 1 and file 2 are the same')
+        print(f'{args.file1} and {args.file2} are the same.')
     else:
         unique_to_set1, unique_to_set2 = subtract_sets_with_similar_paths(set1, set2, args.ignore_hashes, args.ignore_paths)
         # If the user hasn't specified that they want only file 2 results shown then display file 1 results.
         if args.c != 2:
             for count, item in enumerate(unique_to_set2, 1):
-                logging.info(f'{item}')
+                print(f'pair #{count} missing from {args.file1}: {item}')
+
+        #if not args.c:
+        #    print(f'\n----------------------MISSING FROM FILE 1 ABOVE---------MISSING FROM FILE 2 BELOW----------------------\n')
 
         # If the user hasn't specified that they want only file 1 results shown then display file 2 results.
         if args.c != 1:
             for count, item in enumerate(unique_to_set1, 1):
-                logging.info(f'{item}')
+                print(f'pair #{count} missing from {args.file2}: {item}')
+        print("\n----------------------FINAL TALLY----------------------\n")
 
         if args.c != 2:
-            logging.info(f'File 1 ({args.file1}) contains {len(set1)} files but is missing {len(unique_to_set2)} of the {len(set2)} files that file 2 ({args.file2}) has.') 
+            print(f'{args.file1} contains {len(set1)} files and is missing {len(unique_to_set2)} of the {len(set2)} files that {args.file2} has.') 
 
         if args.c != 1:
-            logging.info(f'File 2 ({args.file2}) contains {len(set2)} files but is missing {len(unique_to_set1)} of the {len(set1)} files that file 1 ({args.file1}) has.')
+            print(f'{args.file2} contains {len(set2)} files and is missing {len(unique_to_set1)} of the {len(set1)} files that {args.file1} has.')
         
         if args.ignore_hashes:
-            logging.info(f'Note: hash values were not compared.')
+            print(f'Note: hash values were not compared.')
 
         if args.ignore_paths:
-            logging.info(f'Note: filepaths were not compared.')
+            print(f'Note: filepaths were not compared.')
 
 if __name__ == "__main__":
     main()
