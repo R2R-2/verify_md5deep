@@ -101,12 +101,12 @@ def subtract_sets_with_similar_paths(set1, set2, ignore_hashes, ignore_paths, cu
     return unique_to_set1, unique_to_set2
 
 
-def process_file(file_name, excluded_pairs, ignore_hashes_set, path_ignore_list=None, path_include_list=None):
+def process_file(file_name, excluded_pairs, ignore_hashes_set, exclude_path_list=None, include_path_list=None):
     file_set = set()
     with open(file_name) as f:
         for line in f:
             split_1 = line.split(',') # This variable be a list of substrings of the line separated by commas (not including the commas).
-            split_2 = line.split(' ') # This variable is useful for manifest files that contain only two columns (hash, filepath) separated by a space.
+            split_2 = line.split() # This variable is useful for manifest files that contain only two columns (hash, filepath) separated by a space or multiple spaces.
 
             # Determine which format of md5deep file we are dealing with and construct (hash, filepath) pairs for each line accordingly.
             # This is the regular md5deep format that you get by running the md5deep command. 
@@ -125,15 +125,15 @@ def process_file(file_name, excluded_pairs, ignore_hashes_set, path_ignore_list=
                 # If we've not found either 2 or 4 commas then I don't recognize this manifest file so just skip this line.
                 continue
 
-            if path_ignore_list:
+            if exclude_path_list:
                 # Check if any regex pattern in the list matches the path (pair[1])
-                if any(re.search(pattern, pair[1]) for pattern in path_ignore_list):
+                if any(re.search(pattern, pair[1]) for pattern in exclude_path_list):
                     excluded_pairs.append(pair)
                     continue
 
-            if path_include_list:
-                # Check if the path is included in the path_include_list regex. If not then don't add the pair for consideration.
-                if not (any(re.search(pattern, pair[1]) for pattern in path_include_list)):
+            if include_path_list:
+                # Check if the path is included in the include_path_list regex. If not then don't add the pair for consideration.
+                if not (any(re.search(pattern, pair[1]) for pattern in include_path_list)):
                     excluded_pairs.append(pair)
                     continue
 
@@ -159,9 +159,9 @@ def main():
                         help='don\'t compare hashes')
     parser.add_argument('--ignore-paths',action='store_true',
                         help='don\'t compare filepaths')
-    parser.add_argument('--path-ignore-list', nargs='+', metavar='pattern',
+    parser.add_argument('--exclude-path-list', nargs='+', metavar='pattern',
                         help='list of regexes where if a filepath matches any of them it is not included in the comparisons.')
-    parser.add_argument('--path-include-list', nargs='+', metavar='pattern',
+    parser.add_argument('--include-path-list', nargs='+', metavar='pattern',
                         help='list of regexes where a filepath must match at least one to be included in the comparisons.')
     args = parser.parse_args()
 
@@ -175,14 +175,14 @@ def main():
         print('Both the --ignore-paths and --ignore-hashes paths can\'t simultaneously be set or nothing will be compared') 
         sys.exit(1)
 
-    if args.path_ignore_list and args.path_include_list:
-        print('Both the --path-include-list and --path-ignore-list can\'t simultaneously be set. Either set one or the other or none.')
+    if args.exclude_path_list and args.include_path_list:
+        print('Both the --include-path-list and --exclude-path-list can\'t simultaneously be set. Either set one or the other or none.')
 
     file1_pair_exclusion_list = [] # This variable tracks the number of files in file 1 who's hash is all asterisks (these hashes are created by openrvdas when it doesn't want to generate hash for a large file.
     file2_pair_exclusion_list = []
    
-    set1 = process_file(args.file1, file1_pair_exclusion_list, args.ignore_hashes, args.path_ignore_list, args.path_include_list)
-    set2 = process_file(args.file2, file2_pair_exclusion_list, args.ignore_hashes, args.path_ignore_list, args.path_include_list)
+    set1 = process_file(args.file1, file1_pair_exclusion_list, args.ignore_hashes, args.exclude_path_list, args.include_path_list)
+    set2 = process_file(args.file2, file2_pair_exclusion_list, args.ignore_hashes, args.exclude_path_list, args.include_path_list)
 
     print("\n--------------BEGIN VERIFY_MD5DEEP REPORT-------------\n")
 
