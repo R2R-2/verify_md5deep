@@ -101,7 +101,7 @@ def subtract_sets_with_similar_paths(set1, set2, ignore_hashes, ignore_paths, cu
     return unique_to_set1, unique_to_set2
 
 
-def process_file(file_name, ignore_list=None):
+def process_file(file_name, excluded_pairs, ignore_hashes_set, path_ignore_list=None, path_include_list=None):
     file_set = set()
     with open(file_name) as f:
         for line in f:
@@ -125,10 +125,22 @@ def process_file(file_name, ignore_list=None):
                 # If we've not found either 2 or 4 commas then I don't recognize this manifest file so just skip this line.
                 continue
 
-            if ignore_list:
+            if path_ignore_list:
                 # Check if any regex pattern in the list matches the path (pair[1])
-                if any(re.search(pattern, pair[1]) for pattern in ignore_list):
+                if any(re.search(pattern, pair[1]) for pattern in path_ignore_list):
+                    excluded_pairs.append(pair)
                     continue
+
+            if path_include_list:
+                # Check if the path is included in the path_include_list regex. If not then don't add the pair for consideration.
+                if not (any(re.search(pattern, pair[1]) for pattern in path_include_list)):
+                    excluded_pairs.append(pair)
+                    continue
+
+            # Exclude pairs with hash values equal to the long string of asterisks hashes unless the user has elected not to compare hashes.
+            if pair[0] == '********************************' and not ignore_hashes_set:
+               excluded_pairs.append(pair) 
+               continue
 
             file_set.add(pair)
 
@@ -147,8 +159,10 @@ def main():
                         help='don\'t compare hashes')
     parser.add_argument('--ignore-paths',action='store_true',
                         help='don\'t compare filepaths')
-    parser.add_argument('-i', '--ignore', nargs='+', metavar='pattern',
-                        help='list of substrings/patterns to ignore in file paths')
+    parser.add_argument('--path-ignore-list', nargs='+', metavar='pattern',
+                        help='list of regexes where if a filepath matches any of them it is not included in the comparisons.')
+    parser.add_argument('--path-include-list', nargs='+', metavar='pattern',
+                        help='list of regexes where a filepath must match at least one to be included in the comparisons.')
     args = parser.parse_args()
 
     date = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
@@ -161,41 +175,59 @@ def main():
         print('Both the --ignore-paths and --ignore-hashes paths can\'t simultaneously be set or nothing will be compared') 
         sys.exit(1)
 
+    if args.path_ignore_list and args.path_include_list:
+        print('Both the --path-include-list and --path-ignore-list can\'t simultaneously be set. Either set one or the other or none.')
+
+    file1_pair_exclusion_list = [] # This variable tracks the number of files in file 1 who's hash is all asterisks (these hashes are created by openrvdas when it doesn't want to generate hash for a large file.
+    file2_pair_exclusion_list = []
    
-    set1 = process_file(args.file1, args.ignore)
-    set2 = process_file(args.file2, args.ignore)
+    set1 = process_file(args.file1, file1_pair_exclusion_list, args.ignore_hashes, args.path_ignore_list, args.path_include_list)
+    set2 = process_file(args.file2, file2_pair_exclusion_list, args.ignore_hashes, args.path_ignore_list, args.path_include_list)
 
-    print("\n----------------------BEGIN VERIFY_MD5DEEP REPORT----------------------\n")
+    print("\n--------------BEGIN VERIFY_MD5DEEP REPORT-------------\n")
 
-    if len(set1) == len(set2) and set1 == set2:
-        print(f'{args.file1} and {args.file2} are the same.')
-    else:
-        unique_to_set1, unique_to_set2 = subtract_sets_with_similar_paths(set1, set2, args.ignore_hashes, args.ignore_paths)
-        # If the user hasn't specified that they want only file 2 results shown then display file 1 results.
-        if args.c != 2:
-            for count, item in enumerate(unique_to_set2, 1):
-                print(f'pair #{count} missing from {args.file1}: {item}')
+    #if len(set1) == len(set2) and set1 == set2:
+    #    print(f'{args.file1} and {args.file2} are the same.')
+    #else:
+    unique_to_set1, unique_to_set2 = subtract_sets_with_similar_paths(set1, set2, args.ignore_hashes, args.ignore_paths)
+    # If the user hasn't specified that they want only file 2 results shown then display file 1 results.
+    if args.c != 2:
+        for count, item in enumerate(unique_to_set2, 1):
+            print(f'pair #{count} missing from {args.file1}: {item}')
+        if len(unique_to_set2) == 0:
+            print(f'{args.file1} is not missing any files from {args.file2}.')
 
-        #if not args.c:
-        #    print(f'\n----------------------MISSING FROM FILE 1 ABOVE---------MISSING FROM FILE 2 BELOW----------------------\n')
+    if not args.c:
+        print(f'\n---------------------------------------------------\n')
 
-        # If the user hasn't specified that they want only file 1 results shown then display file 2 results.
-        if args.c != 1:
-            for count, item in enumerate(unique_to_set1, 1):
-                print(f'pair #{count} missing from {args.file2}: {item}')
-        print("\n----------------------FINAL TALLY----------------------\n")
+    # If the user hasn't specified that they want only file 1 results shown then display file 2 results.
+    if args.c != 1:
+        for count, item in enumerate(unique_to_set1, 1):
+            print(f'pair #{count} missing from {args.file2}: {item}')
+        if len(unique_to_set1) == 0:
+            print(f'{args.file2} is not missing any files from {args.file1}.')
 
-        if args.c != 2:
-            print(f'{args.file1} contains {len(set1)} files and is missing {len(unique_to_set2)} of the {len(set2)} files that {args.file2} has.') 
+    print("\n----------------------FINAL TALLY----------------------\n")
 
-        if args.c != 1:
-            print(f'{args.file2} contains {len(set2)} files and is missing {len(unique_to_set1)} of the {len(set1)} files that {args.file1} has.')
-        
-        if args.ignore_hashes:
-            print(f'Note: hash values were not compared.')
+    if args.c != 2:
+        print(f'{args.file1} contains {len(set1)} files and is missing {len(unique_to_set2)} of the {len(set2)} file(s) that {args.file2} has.') 
 
-        if args.ignore_paths:
-            print(f'Note: filepaths were not compared.')
+    if args.c != 1:
+        print(f'{args.file2} contains {len(set2)} files and is missing {len(unique_to_set1)} of the {len(set1)} file(s) that {args.file1} has.')
+
+    print("\n----------------------NOTES----------------------\n")
+    
+    if args.ignore_hashes:
+        print(f'Note: hash values were not compared.')
+
+    if args.ignore_paths:
+        print(f'Note: filepaths were not compared.')
+
+    if len(file1_pair_exclusion_list) > 0:
+        print(f'Note: {args.file1} contains {len(file1_pair_exclusion_list)} file(s) that weren\'t compared either because they had an all-asterisk hash value or they matched an exclusion list.')
+
+    if len(file2_pair_exclusion_list) > 0:
+        print(f'Note: {args.file2} contains {len(file2_pair_exclusion_list)} file(s) that weren\'t compared either because they had an all-asterisk hash value or they matched an exclusion list.')
 
 if __name__ == "__main__":
     main()
