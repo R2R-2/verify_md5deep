@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+
+from verify_md5deep_helper_functions import *
 import argparse
 import os
 import shutil
@@ -7,55 +9,6 @@ import datetime
 import logging
 import re
 import sys
-
-
-def fix_second(path):
-    if not path[0:2] == './':
-        path = './' + path
-    files = path.split('/')
-    files.pop(1)
-    return '/'.join(files)[1:]
-
-
-def are_paths_similar(path1, path2, cutoff_percentage=0.4):
-    """
-    Compares two file paths and returns True if they are considered similar 
-    based on a cutoff percentage of how much of either path would need to be 
-    chopped off for them to match. Returns False otherwise.
-    
-    Parameters:
-    - path1 (str): The first file path.
-    - path2 (str): The second file path.
-    - cutoff_percentage (float): The percentage threshold (default is 0.4 or 40%).
-    
-    Returns:
-    - bool: True if the paths are similar based on the given criteria, False otherwise.
-    """
-    
-    # Find the first point where the strings start matching
-    min_len = min(len(path1), len(path2))
-    
-    match_index = -1
-    for i in range(min_len):
-        if path1[-(i + 1):] == path2[-(i + 1):]:
-            match_index = i
-        else:
-            break
-    
-    # If no match found at all, return False
-    if match_index == -1:
-        return False
-    
-    # Calculate the number of characters to be cut off for each path to match
-    cut1 = len(path1) - match_index - 1
-    cut2 = len(path2) - match_index - 1
-    
-    # Calculate the percentage of the path that would be cut off
-    perc1 = cut1 / len(path1)
-    perc2 = cut2 / len(path2)
-    
-    # Return True if both percentages are within the cutoff threshold
-    return perc1 <= cutoff_percentage and perc2 <= cutoff_percentage
 
 
 def subtract_sets_with_similar_paths(set1, set2, ignore_hashes, ignore_paths, cutoff_percentage=0.4):
@@ -103,46 +56,85 @@ def subtract_sets_with_similar_paths(set1, set2, ignore_hashes, ignore_paths, cu
 
 def process_file(file_name, excluded_pairs, ignore_hashes_set, exclude_path_list=None, include_path_list=None):
     file_set = set()
-    with open(file_name) as f:
-        for line in f:
-            split_1 = line.split(',') # This variable be a list of substrings of the line separated by commas (not including the commas).
-            split_2 = line.split() # This variable is useful for manifest files that contain only two columns (hash, filepath) separated by a space or multiple spaces.
+    try:
+        with open(file_name, 'r', encoding='utf-8', errors='ignore') as f:
+            for line in f:
+                split_1 = line.split(',') # This variable be a list of substrings of the line separated by commas (not including the commas).
+                split_2 = line.split() # This variable is useful for manifest files that contain only two columns (hash, filepath) separated by a space or multiple spaces.
 
-            # Determine which format of md5deep file we are dealing with and construct (hash, filepath) pairs for each line accordingly.
-            # This is the regular md5deep format that you get by running the md5deep command. 
-            if len(split_1) == 4:
-                pair = (split_1[1].strip(), split_1[3].strip())
-            # Distros in the OpenVDM/OpenRVDAS format will have an md5deep file called "md5_summary.txt"
-            # and these are different because they don't only have 2 columns.
-            elif len(split_2) == 4: # this is a new format! WHOI is sending space delimited files with 4 columns
-                pair = (split_2[1].strip(), split_2[3].strip())
-            elif len(split_2) == 2:
-                pair = (split_2[0].strip(), split_2[1].strip())
-            # edu.washington have started creating md5deep files. They're format contains 3 columns (file size, hash, absolute path). These look similar to the 4-column md5deep files except they're missing the date column. The delimiter for both is a comma.
-            elif len(split_1) == 3:
-                pair = (split_1[1].strip(), split_1[2].strip())
-            else:
-                # If we've not found either 2 or 4 commas then I don't recognize this manifest file so just skip this line.
-                continue
+                # This is the regular md5deep format that you get by running the md5deep command.
+                if len(split_1) == 4:
+                    hashval = split_1[1].strip()
+                    pathval = split_1[3].strip()
+                    pair = (hashval, pathval)
 
-            if exclude_path_list:
-                # Check if any regex pattern in the list matches the path (pair[1])
-                if any(re.search(pattern, pair[1]) for pattern in exclude_path_list):
-                    excluded_pairs.append(pair)
+                # Distros in the OpenVDM/OpenRVDAS format will have an md5deep file called
+                # "md5_summary.txt" and these are different because they don't only have 2 columns.
+                elif len(split_2) == 4:  # WHOI space-delimited format (4 columns)
+                    hashval = split_2[1].strip()
+                    pathval = split_2[3].strip()
+                    pair = (hashval, pathval)
+                    if is_valid_file_hash(hashval) and is_valid_file_path(pathval):
+                        pair = (hashval, pathval)
+                    # The below case handles an edge case where a md5_summary.txt file is being read with a path that contains spaces. 
+                    # In this case you must join the path together because otherwise the hash value becomes part of the path instead
+                    # of a hash (and obviously the path gets cut off).
+                    elif is_valid_file_hash(split_2[0].strip()) and is_valid_file_path_syntax(" ".join(split_2[1:]).strip()):
+                        pair = (split_2[0].strip(), " ".join(split_2[1:]))
+
+                elif len(split_2) == 2:
+                    hashval = split_2[0].strip()
+                    pathval = split_2[1].strip()
+                    pair = (hashval, pathval)
+
+                # edu.washington md5deep format:
+                # 3 columns: file size, hash, absolute path (comma-delimited)
+                elif len(split_1) == 3:
+                    hashval = split_1[1].strip()
+                    pathval = split_1[2].strip()
+                    pair = (hashval, pathval)
+
+                # Unrecognized manifest format
+                else:
                     continue
 
-            if include_path_list:
-                # Check if the path is included in the include_path_list regex. If not then don't add the pair for consideration.
-                if not (any(re.search(pattern, pair[1]) for pattern in include_path_list)):
-                    excluded_pairs.append(pair)
+
+                # Exclude pairs with hash values equal to the long string of asterisks hashes unless the user has elected not to compare hashes.
+                if pair[0] == '********************************' and not ignore_hashes_set:
+                   excluded_pairs.append((pair, "the hash is all asterisks (and we aren't ignoring hashes)")) 
+                   continue
+
+                #### This section looks to exclude the pair for any reason. If a pair matches any of these conditionals it will be excluded from comparison and will instead be recorded in a list along with its reason for being excluded.
+                if exclude_path_list:
+                    # Check if any regex pattern in the list matches the path (pair[1])
+                    if any(re.search(pattern, pair[1]) for pattern in exclude_path_list):
+                        excluded_pairs.append((pair, "the path matched a pattern in an exclude_path_list"))
+                        continue
+
+                if include_path_list:
+                    # Check if the path is included in the include_path_list regex. If not then don't add the pair for consideration.
+                    if not (any(re.search(pattern, pair[1]) for pattern in include_path_list)):
+                        excluded_pairs.append((pair, "the path did not match a pattern in the include_path_list"))
+                        continue
+
+                if not is_valid_file_hash(pair[0]):
+                    # Check the hash value if a valid hash. If not, then exclude pair:
+                    excluded_pairs.append((pair, "the hash value is invalid"))
                     continue
 
-            # Exclude pairs with hash values equal to the long string of asterisks hashes unless the user has elected not to compare hashes.
-            if pair[0] == '********************************' and not ignore_hashes_set:
-               excluded_pairs.append(pair) 
-               continue
+                if not is_valid_file_path_syntax(pair[1]):
+                    excluded_pairs.append((pair, "the path is invalid"))
+                    continue
 
-            file_set.add(pair)
+
+                file_set.add(pair)
+
+    except FileNotFoundError:
+        logging.error(f"File not found: {file_name}")
+        sys.exit(1)
+    except PermissionError:
+        logging.error(f"Permission denied: {file_name}")
+        sys.exit(1)
 
     return file_set
 
@@ -163,6 +155,8 @@ def main():
                         help='list of regexes where if a filepath matches any of them it is not included in the comparisons.')
     parser.add_argument('--include-path-list', nargs='+', metavar='pattern',
                         help='list of regexes where a filepath must match at least one to be included in the comparisons.')
+    parser.add_argument('--show-excluded-pairs',action='store_true',
+                        help='show all of the pairs that were not compared along with their reason for exclusion')
     args = parser.parse_args()
 
     date = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
@@ -190,6 +184,16 @@ def main():
     #    print(f'{args.file1} and {args.file2} are the same.')
     #else:
     unique_to_set1, unique_to_set2 = subtract_sets_with_similar_paths(set1, set2, args.ignore_hashes, args.ignore_paths)
+    if args.show_excluded_pairs:
+        print("\n--------------Excluded Pairs (shown because --excluded-pairs flag set--------------")
+        print(f'--------------{args.file1} excluded pairs--------------')
+        for pair in file1_pair_exclusion_list:
+            print(pair)
+        print(f'--------------{args.file2} excluded pairs--------------')
+        for pair in file2_pair_exclusion_list:
+            print(pair)
+        print("--------------End excluded pairs section--------------\n\n")
+
     # If the user hasn't specified that they want only file 2 results shown then display file 1 results.
     if args.c != 2:
         for count, item in enumerate(unique_to_set2, 1):
