@@ -214,10 +214,10 @@ def main():
     print("\n----------------------FINAL TALLY----------------------\n")
 
     if args.c != 2:
-        print(f'{args.file1} contains {len(set1)} files and is missing {len(unique_to_set2)} of the {len(set2)} file(s) that {args.file2} has.') 
+        print(f'{args.file1} contains {len(set1)} files and is missing {len(unique_to_set2)} of the {len(set2)} valid file(s) ({len(set2) + len(file2_pair_exclusion_list)} files total) that {args.file2} has.') 
 
     if args.c != 1:
-        print(f'{args.file2} contains {len(set2)} files and is missing {len(unique_to_set1)} of the {len(set1)} file(s) that {args.file1} has.')
+        print(f'{args.file2} contains {len(set2)} files and is missing {len(unique_to_set1)} of the {len(set1)} valid file(s) ({len(set1) + len(file1_pair_exclusion_list)} files total) that {args.file1} has.')
 
     print("\n----------------------NOTES----------------------\n")
     
@@ -228,10 +228,10 @@ def main():
         print(f'Note: filepaths were not compared.')
 
     if len(file1_pair_exclusion_list) > 0:
-        print(f'Note: {args.file1} contains {len(file1_pair_exclusion_list)} file(s) that weren\'t compared either because they had an all-asterisk hash value or they matched an exclusion list.')
+        print(f'Note: {args.file1} contains {len(file1_pair_exclusion_list)} file(s) that weren\'t compared because they either had an invalid hash value, invalid file path, or matched an exclusion list.')
 
     if len(file2_pair_exclusion_list) > 0:
-        print(f'Note: {args.file2} contains {len(file2_pair_exclusion_list)} file(s) that weren\'t compared either because they had an all-asterisk hash value or they matched an exclusion list.')
+        print(f'Note: {args.file2} contains {len(file2_pair_exclusion_list)} file(s) that weren\'t compared because they either had an invalid hash value, invalid file path, or matched an exclusion list.')
 
 if __name__ == "__main__":
     main()
