@@ -1,20 +1,22 @@
 import re
 from pathlib import Path
 
+from pathlib import Path
+
 def are_paths_similar(path1, path2, min_matching_segments=3):
     """
-    Compares paths based on directory segments rather than characters.
-
-    Parameters:
-    - path1, path2: The file paths to compare.
-    - min_matching_segments: The minimum number of trailing segments
-      (including filename) that must match.
+    Compares paths based on directory segments, normalizing slashes first.
     """
-    # Convert to Path objects and get the parts (folders + filename)
-    parts1 = Path(path1).parts
-    parts2 = Path(path2).parts
+    # 1. Normalize slashes: Convert all \ to / 
+    # This prevents 'dir\file' being treated as a single segment on non-Windows systems
+    path1_norm = path1.replace('\\', '/')
+    path2_norm = path2.replace('\\', '/')
 
-    # Reverse them to compare from the filename upwards
+    # 2. Convert to Path objects and get the parts
+    parts1 = Path(path1_norm).parts
+    parts2 = Path(path2_norm).parts
+
+    # 3. Reverse them to compare from the filename upwards
     parts1_rev = parts1[::-1]
     parts2_rev = parts2[::-1]
 
@@ -25,8 +27,6 @@ def are_paths_similar(path1, path2, min_matching_segments=3):
         else:
             break
 
-    # Return True if the number of matching trailing folders
-    # meets your threshold
     return match_count >= min_matching_segments
 
 
