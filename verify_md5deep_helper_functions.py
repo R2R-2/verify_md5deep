@@ -57,7 +57,7 @@ def is_valid_file_hash(s: str) -> bool:
     return len(s) in valid_lengths
 
 
-def is_valid_file_path_syntax(path: str) -> bool:
+def is_valid_file_path(path: str) -> bool:
     """
     Return True if path is a syntactically valid POSIX file path.
     No filesystem checks are performed.

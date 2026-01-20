@@ -79,7 +79,7 @@ def process_file(file_name, excluded_pairs, ignore_hashes_set, exclude_path_list
                     # The below case handles an edge case where a md5_summary.txt file is being read with a path that contains spaces. 
                     # In this case you must join the path together because otherwise the hash value becomes part of the path instead
                     # of a hash (and obviously the path gets cut off).
-                    elif is_valid_file_hash(split_2[0].strip()) and is_valid_file_path_syntax(" ".join(split_2[1:]).strip()):
+                    elif is_valid_file_hash(split_2[0].strip()) and is_valid_file_path(" ".join(split_2[1:]).strip()):
                         pair = (split_2[0].strip(), " ".join(split_2[1:]))
 
                 elif len(split_2) == 2:
@@ -122,7 +122,7 @@ def process_file(file_name, excluded_pairs, ignore_hashes_set, exclude_path_list
                     excluded_pairs.append((pair, "the hash value is invalid"))
                     continue
 
-                if not is_valid_file_path_syntax(pair[1]):
+                if not is_valid_file_path(pair[1]):
                     excluded_pairs.append((pair, "the path is invalid"))
                     continue
 
