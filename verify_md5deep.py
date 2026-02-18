@@ -147,14 +147,15 @@ def main():
                         help='md5deep file listing file 2')
     parser.add_argument('-c', metavar='num', type=int, choices=[1, 2],
                         help='copy diff of files in a given direction (1 or 2)')
+    parser.add_argument('-s', '--show-summary', action='store_true', dest='show_summary', help='output only the summary not individual diffed files')
     parser.add_argument('--ignore-hashes',action='store_true',
                         help='don\'t compare hashes')
     parser.add_argument('--ignore-paths',action='store_true',
                         help='don\'t compare filepaths')
     parser.add_argument('--exclude-path-list', nargs='+', metavar='pattern',
-                        help='list of regexes where if a filepath matches any of them it is not included in the comparisons.')
+                        help='list of regexes where if a filepath matches any of them it is not included in the comparisons')
     parser.add_argument('--include-path-list', nargs='+', metavar='pattern',
-                        help='list of regexes where a filepath must match at least one to be included in the comparisons.')
+                        help='list of regexes where a filepath must match at least one to be included in the comparisons')
     parser.add_argument('--show-excluded-pairs',action='store_true',
                         help='show all of the pairs that were not compared along with their reason for exclusion')
     args = parser.parse_args()
@@ -178,13 +179,13 @@ def main():
     set1 = process_file(args.file1, file1_pair_exclusion_list, args.ignore_hashes, args.exclude_path_list, args.include_path_list)
     set2 = process_file(args.file2, file2_pair_exclusion_list, args.ignore_hashes, args.exclude_path_list, args.include_path_list)
 
-    print("\n--------------BEGIN VERIFY_MD5DEEP REPORT-------------\n")
+    print("--------------BEGIN VERIFY_MD5DEEP REPORT-------------\n")
 
     #if len(set1) == len(set2) and set1 == set2:
     #    print(f'{args.file1} and {args.file2} are the same.')
     #else:
     unique_to_set1, unique_to_set2 = subtract_sets_with_similar_paths(set1, set2, args.ignore_hashes, args.ignore_paths)
-    if args.show_excluded_pairs:
+    if args.show_excluded_pairs and not args.show_summary:
         print("\n--------------Excluded Pairs (shown because --excluded-pairs flag set--------------")
         print(f'--------------{args.file1} excluded pairs--------------')
         for pair in file1_pair_exclusion_list:
@@ -195,17 +196,17 @@ def main():
         print("--------------End excluded pairs section--------------\n\n")
 
     # If the user hasn't specified that they want only file 2 results shown then display file 1 results.
-    if args.c != 2:
+    if args.c != 2 and not args.show_summary:
         for count, item in enumerate(unique_to_set2, 1):
             print(f'pair #{count} missing from {args.file1}: {item}')
         if len(unique_to_set2) == 0:
             print(f'{args.file1} is not missing any files from {args.file2}.')
 
-    if not args.c:
+    if not args.c and not args.show_summary:
         print(f'\n---------------------------------------------------\n')
 
     # If the user hasn't specified that they want only file 1 results shown then display file 2 results.
-    if args.c != 1:
+    if args.c != 1 and not args.show_summary:
         for count, item in enumerate(unique_to_set1, 1):
             print(f'pair #{count} missing from {args.file2}: {item}')
         if len(unique_to_set1) == 0:
