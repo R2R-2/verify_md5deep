@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
-
-from pathlib import Path
+import os
+import sys
 
 def are_paths_similar(path1, path2, min_matching_segments=3):
     """
@@ -91,3 +91,40 @@ def is_valid_file_path(path: str) -> bool:
 
     return True
 
+
+def check_writable(path):
+    # 1. Get the absolute path and find the parent directory
+    abs_path = os.path.abspath(path)
+    parent_dir = os.path.dirname(abs_path)
+
+    # 2. Check if the parent directory exists
+    if not os.path.exists(parent_dir):
+        print(f"Error: The directory '{parent_dir}' does not exist.")
+        sys.exit(1)
+
+    # 3. Check if the parent directory is writable
+    if not os.access(parent_dir, os.W_OK):
+        print(f"Error: You do not have permission to write to '{parent_dir}'.")
+        sys.exit(1)
+
+    return abs_path
+
+
+class Tee:
+    def __init__(self, file_path, mode='w'):
+        self.file = open(file_path, mode)
+        self.stdout = sys.stdout
+
+    def write(self, data, no_stdout=False):
+        if no_stdout:
+            self.file.write(data)    # Write to file
+        else:
+            self.stdout.write(data)  # Write to console
+            self.file.write(data)    # Write to file
+
+    def flush(self):
+        self.file.flush()
+        self.stdout.flush()
+
+    def close(self):
+        self.file.close()
