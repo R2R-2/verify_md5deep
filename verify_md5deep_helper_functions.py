@@ -128,3 +128,19 @@ class Tee:
 
     def close(self):
         self.file.close()
+
+
+class TerminalOnly:
+    """A mock Tee class that only writes to the console."""
+    def __init__(self):
+        self.stdout = sys.stdout
+
+    def write(self, data, no_stdout=False):
+        if not no_stdout:
+            self.stdout.write(data)
+
+    def flush(self):
+        self.stdout.flush()
+
+    def close(self):
+        pass

@@ -179,6 +179,8 @@ def main():
         check_writable(args.output_filepath)
         output_file = Tee(args.output_filepath)
         sys.stdout = output_file
+    else:
+        output_file = TerminalOnly()
 
     file1_pair_exclusion_list = [] # This variable tracks the number of files in file 1 who's hash is all asterisks (these hashes are created by openrvdas when it doesn't want to generate hash for a large file.
     file2_pair_exclusion_list = []
@@ -186,7 +188,7 @@ def main():
     set1 = process_file(args.file1, file1_pair_exclusion_list, args.ignore_hashes, args.exclude_path_list, args.include_path_list)
     set2 = process_file(args.file2, file2_pair_exclusion_list, args.ignore_hashes, args.exclude_path_list, args.include_path_list)
 
-    output_file.write("--------------BEGIN VERIFY_MD5DEEP REPORT-------------\n")
+    output_file.write("\n--------------BEGIN VERIFY_MD5DEEP REPORT-------------\n")
 
     #if len(set1) == len(set2) and set1 == set2:
     #    output_file.write(f'{args.file1} and {args.file2} are the same.')
@@ -231,7 +233,7 @@ def main():
     if args.c != 1:
         output_file.write(f'\n{args.file2} contains {len(set2)} files and is missing {len(unique_to_set1)} of the {len(set1)} valid file(s) ({len(set1) + len(file1_pair_exclusion_list)} files total) that {args.file1} has.')
 
-    output_file.write("\n\n----------------------NOTES----------------------")
+    output_file.write("\n\n----------------------NOTES----------------------\n")
     
     if args.ignore_hashes:
         output_file.write(f'\nNote: hash values were not compared.')
@@ -244,6 +246,8 @@ def main():
 
     if len(file2_pair_exclusion_list) > 0:
         output_file.write(f'\nNote: {args.file2} contains {len(file2_pair_exclusion_list)} file(s) that weren\'t compared because they either had an invalid hash value, invalid file path, or matched an exclusion list.')
+
+    output_file.write("\n--------------END OF VERIFY_MD5DEEP REPORT-------------\n")
 
 if __name__ == "__main__":
     main()
