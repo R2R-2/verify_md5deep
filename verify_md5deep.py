@@ -147,7 +147,7 @@ def main():
                         help='md5deep file listing file 2')
     parser.add_argument('-c', metavar='num', type=int, choices=[1, 2],
                         help='copy diff of files in a given direction (1 or 2)')
-    parser.add_argument('-s', '--show-summary', action='store_true', dest='show_summary', help='output only the summary not individual diffed files')
+    parser.add_argument('-s', '--show-summary', action='store_true', dest='show_summary', help='output only the summary not individual diffed files. The summary will not show excluded_files')
     parser.add_argument('-o', '--output-filepath', dest='output_filepath', help='write a copy of the output to a file')
     parser.add_argument('--ignore-hashes',action='store_true',
                         help='don\'t compare hashes')
@@ -195,16 +195,16 @@ def main():
     #else:
     unique_to_set1, unique_to_set2 = subtract_sets_with_similar_paths(set1, set2, args.ignore_hashes, args.ignore_paths)
     if args.show_excluded_pairs:
-        output_file.write("\n--------------Excluded Pairs (shown because --excluded-pairs flag set--------------", args.show_summary)
-        output_file.write(f'\n--------------{args.file1} excluded pairs--------------', args.show_summary)
+        output_file.write("--------------EXCLUDED PAIRS (shown because --excluded-pairs flag set)--------------\n\n", args.show_summary)
         for pair in file1_pair_exclusion_list:
-            output_file.write(pair)
-            if args.output_filepath:
-                Path(args.output_filepath).write_text(pair)
-        output_file.write(f'\n--------------{args.file2} excluded pairs--------------', args.show_summary)
+            output_file.write(str(pair[0]) + "\n", args.show_summary)
+            #if args.output_filepath:
+            #    Path(args.output_filepath).write_text(str(pair[0]) + "\n")
         for pair in file2_pair_exclusion_list:
-            output_file.write(pair)
-        output_file.write("\n--------------End excluded pairs section--------------\n\n", args.show_summary)
+            output_file.write(str(pair[0]) + "\n", args.show_summary)
+            #if args.output_filepath:
+            #    Path(args.output_filepath).write_text(str(pair[0]) + "\n")
+        output_file.write("\n--------------END EXCLUDE PAIRS SECTION--------------\n", args.show_summary)
 
     # If the user hasn't specified that they want only file 2 results shown then display file 1 results.
     if args.c != 2:
